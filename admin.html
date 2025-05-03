@@ -1,0 +1,286 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我真心想告诉你.......</title>
+    <link rel="icon" type="image/png" href="https://bing.com/th/id/BCO.c38558c4-93b0-484a-9779-1f583c7a4900.png">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #000000; /* 黑色背景 */
+            margin: 0;
+            padding: 20px;
+            color: #FFFFFF; /* 白色字体 */
+        }
+        h2 {
+            color: #FFFFFF; /* 白色标题 */
+            text-align: center;
+        }
+        h3 {
+            color: #FFFFFF;
+        }
+        .section {
+            background: #1a1a1a; /* 稍浅的黑色容器 */
+            padding: 20px;
+            border: 2px solid #FFFFFF; /* 白色边框 */
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 0 10px rgba(255,255,255,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .password-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 2px solid #FFFFFF; /* 白色边框 */
+            border-radius: 4px;
+            background-color: #1a1a1a;
+            color: #FFFFFF;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #333333; /* 深灰色按钮 */
+            color: #FFFFFF;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #444444; /* 稍深的深灰色 */
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #FFFFFF; /* 白色边框 */
+            text-align: left;
+            color: #FFFFFF;
+        }
+        th {
+            background-color: #333333; /* 深灰色表头 */
+            color: #FFFFFF;
+        }
+        td button {
+            background-color: #333333;
+            color: #FFFFFF;
+            margin-right: 5px;
+        }
+        td button:hover {
+            background-color: #444444;
+        }
+    </style>
+</head>
+<body>
+    <h2>后台管理</h2>
+
+    <div class="section">
+        <h3>添加/修改密码-昵称-内容</h3>
+        <div class="form-group">
+            <label>密码</label>
+            <div class="password-group">
+                <input type="text" id="passwordInput">
+                <button onclick="generateRandomPassword()">随机生成</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>昵称</label>
+            <input type="text" id="nicknameInput">
+        </div>
+        <div class="form-group">
+            <label>内容</label>
+            <textarea id="contentInput" rows="4"></textarea>
+        </div>
+        <button onclick="saveData()">保存</button>
+    </div>
+
+    <div class="section">
+        <h3>当前用户</h3>
+        <table id="dataTable">
+            <thead>
+                <tr>
+                    <th>密码</th>
+                    <th>昵称</th>
+                    <th>内容</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h3>访问记录</h3>
+        <table id="recordsTable">
+            <thead>
+                <tr>
+                    <th>密码</th>
+                    <th>昵称</th>
+                    <th>内容</th>
+                    <th>IP</th>
+                    <th>时间</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        async function loadData() {
+            const response = await fetch('/api/data');
+            const data = await response.json();
+            const tbody = document.querySelector('#dataTable tbody');
+            tbody.innerHTML = '';
+            data.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.password}</td>
+                    <td>${item.nickname}</td>
+                    <td>${item.content}</td>
+                    <td>
+                        <button onclick="editData('${item.password}', '${item.nickname}', \`${item.content}\`)">修改</button>
+                        <button onclick="deleteData('${item.password}')">删除</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        async function loadRecords() {
+            const response = await fetch('/api/records');
+            const records = await response.json();
+            // 按时间从新到旧排序
+            records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            const tbody = document.querySelector('#recordsTable tbody');
+            tbody.innerHTML = '';
+            records.forEach(record => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${record.password}</td>
+                    <td>${record.nickname}</td>
+                    <td>${record.content}</td>
+                    <td>${record.ip}</td>
+                    <td>${record.timestamp}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        async function saveData() {
+            const password = document.getElementById('passwordInput').value;
+            const nickname = document.getElementById('nicknameInput').value;
+            const content = document.getElementById('contentInput').value;
+
+            if (!password || !nickname || !content) {
+                alert('请填写所有字段');
+                return;
+            }
+
+            const response = await fetch('/api/data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password, nickname, content })
+            });
+            const result = await response.json();
+
+            if (result.success) {
+                alert('保存成功');
+                await Promise.all([loadData(), loadRecords()]); // 瞬时同步
+                // 清空输入框
+                document.getElementById('passwordInput').value = '';
+                document.getElementById('nicknameInput').value = '';
+                document.getElementById('contentInput').value = '';
+            } else {
+                alert('保存失败');
+            }
+        }
+
+        function editData(password, nickname, content) {
+            // 填充输入框
+            document.getElementById('passwordInput').value = password;
+            document.getElementById('nicknameInput').value = nickname;
+            document.getElementById('contentInput').value = content;
+        }
+
+        async function deleteData(password) {
+            const response = await fetch(`/api/data/${encodeURIComponent(password)}`, {
+                method: 'DELETE'
+            });
+            const result = await response.json();
+
+            if (result.success) {
+                alert('删除成功');
+                await Promise.all([loadData(), loadRecords()]); // 瞬时同步
+            } else {
+                alert('删除失败');
+            }
+        }
+
+        function generateRandomPassword() {
+            const length = Math.floor(Math.random() * 5) + 6; // 6-10 位
+            const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let password = '';
+            for (let i = 0; i < length; i++) {
+                const randomIndex = Math.floor(Math.random() * charset.length);
+                password += charset[randomIndex];
+            }
+            document.getElementById('passwordInput').value = password;
+        }
+
+        // 初始加载数据和记录
+        Promise.all([loadData(), loadRecords()]);
+    </script>
+</body>
+</html>

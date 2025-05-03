@@ -1,0 +1,211 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我真心想告诉你.......</title>
+    <link rel="icon" type="image/png" href="https://bing.com/th/id/BCO.c38558c4-93b0-484a-9779-1f583c7a4900.png">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #000000; /* 黑色背景 */
+            color: #FFFFFF; /* 白色字体 */
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+        .container {
+            text-align: center;
+            background: #1a1a1a; /* 稍浅的黑色容器 */
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(255,255,255,0.1);
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .error-message {
+            color: #ff0000; /* 红色错误提示 */
+            margin-top: 10px;
+            display: none;
+        }
+        input, textarea.email-input {
+            padding: 10px;
+            margin: 10px 10px 0 10px;
+            width: 200px;
+            user-select: text;
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            background-color: #1a1a1a;
+            color: #FFFFFF;
+            border: 2px solid #FFFFFF; /* 白色边框 */
+            border-radius: 4px;
+        }
+        textarea.email-input {
+            height: 18px; /* 与 input 高度一致 */
+            resize: none;
+        }
+        textarea.email-input::placeholder {
+            color: #888888; /* 浅色提示词 */
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #333333; /* 深灰色按钮 */
+            color: #FFFFFF;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #444444; /* 稍深的深灰色 */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 style="color: #FFFFFF;">📝 请输入密码</h2>
+        <input type="password" id="passwordInput" placeholder="请输入密码">
+        <button onclick="checkPassword()">提交</button>
+        <div class="error-message" id="errorMessage">密码错误</div>
+        
+        <textarea class="email-input" id="emailInput" placeholder="有什么想说的通过我发送"></textarea>
+        <button onclick="sendEmail()">发送</button>
+    </div>
+
+    <script>
+        async function checkPassword() {
+            const password = document.getElementById('passwordInput').value;
+            const errorMessage = document.getElementById('errorMessage');
+
+            const response = await fetch('/api/check-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password })
+            });
+            const result = await response.json();
+
+            if (result.success) {
+                window.location.href = `content.html?content=${encodeURIComponent(result.content)}&nickname=${encodeURIComponent(result.nickname)}`;
+                errorMessage.style.display = 'none'; // 清除错误提示
+            } else {
+                errorMessage.style.display = 'block'; // 显示错误提示
+            }
+
+            document.getElementById('passwordInput').value = '';
+        }
+
+        async function sendEmail() {
+            const message = document.getElementById('emailInput').value;
+            if (!message.trim()) {
+                alert('请输入消息内容');
+                return;
+            }
+
+            const response = await fetch('/api/send-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message })
+            });
+            const result = await response.json();
+
+            if (result.success) {
+                alert('邮件发送成功');
+                document.getElementById('emailInput').value = '';
+            } else {
+                alert('邮件发送失败，请稍后重试');
+            }
+        }
+
+        document.getElementById('passwordInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                checkPassword();
+            }
+        });
+
+        document.getElementById('emailInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendEmail();
+            }
+        });
+
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            alert('右键菜单已被禁用');
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (
+                e.key === 'F12' ||
+                (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C'))
+            ) {
+                e.preventDefault();
+                alert('开发者工具已被禁用');
+            }
+        });
+
+        document.addEventListener('copy', function(e) {
+            e.preventDefault();
+            alert('复制功能已被禁用');
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'c') {
+                e.preventDefault();
+                alert('复制功能已被禁用');
+            }
+        });
+    </script>
+</body>
+</html>
